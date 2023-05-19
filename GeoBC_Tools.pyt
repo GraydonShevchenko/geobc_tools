@@ -33,7 +33,8 @@ class VolumeCalculator(object):
     def getParameterInfo(self):
         """Define parameter definitions"""
         aoi = arcpy.Parameter(name='aoi', 
-                              displayName='Area of interest polygon layer',           direction='Input', 
+                              displayName='Area of interest polygon layer',
+                              direction='Input', 
                               datatype='GPFeatureLayer', 
                               parameterType='Required'
                               )
@@ -77,10 +78,16 @@ class VolumeCalculator(object):
                              datatype='DEFeatureClass',
                              parameterType='Optional'
                              )
+        vri = arcpy.Parameter(name='vri',
+                              displayName='Optional VRI dataset to use instead of current',
+                              direction='Input',
+                              datatype='GPFeatureLayer',
+                              parameterType='Optional'
+                              )
 
         fld.parameterDependencies = [aoi.name]
         xls.filter.list = ['xlsx']
-        params = [aoi, fld, spc, xls, b_un, b_pw, fc]
+        params = [aoi, fld, spc, xls, b_un, b_pw, fc, vri]
         return params
 
     def isLicensed(self):
@@ -110,11 +117,12 @@ class VolumeCalculator(object):
             bcgw_pw=parameters[5].valueAsText,
             out_fc=parameters[6].valueAsText,
             excel=parameters[3].valueAsText,
-            species_list=parameters[2].valueAsText)
+            species_list=parameters[2].valueAsText,
+            vri=parameters[7].valueAsText)
         
         lst_species_fields = volume.calculate_volumes()
         volume.create_excel(lst_species_fields=lst_species_fields)
-        arcpy.Delete_management('memory')
+        arcpy.Delete_management('in_memory')
         del volume
         return
 
@@ -125,27 +133,28 @@ class VolumeCalculator(object):
 
 
 class CalculateVolumes:
-    def __init__(self, aoi, id_fields, species_list, excel, bcgw_un, bcgw_pw, out_fc):
+    def __init__(self, aoi, id_fields, species_list, excel, bcgw_un, bcgw_pw, out_fc, vri):
         self.aoi = aoi
         self.lst_fld_ids = str(id_fields).split(';') if not isinstance(id_fields, list) else id_fields
         self.lst_species = str(species_list).split(';') if not isinstance(species_list, list) else species_list
         self.lst_species.append('Other')
         self.bcgw_un = bcgw_un
         self.bcgw_pw = bcgw_pw
-        self.scratch_gdb = 'memory'
+        self.scratch_gdb = 'in_memory'
         self.fc_volume_summary = None if out_fc == '#' else out_fc
-        self.scratch_gdb = 'memory'
+        self.scratch_gdb = 'in_memory'
         self.aprx = arcpy.mp.ArcGISProject('CURRENT')
         self.sde_folder = self.aprx.homeFolder
         self.output_xls = Environment.get_full_path(excel)
 
         if not self.fc_volume_summary:
             self.fc_volume_summary = os.path.join(self.scratch_gdb, 'volume_summary')
+        arcpy.AddMessage(self.fc_volume_summary)
     
         # Connect to SDE databases and create output folders
         self.bcgw_db = Environment.create_bcgw_connection(location=self.sde_folder, bcgw_user_name=self.bcgw_un, bcgw_password=self.bcgw_pw, )
     
-        self.__vri = os.path.join(self.bcgw_db, 'WHSE_FOREST_VEGETATION.VEG_COMP_LYR_R1_POLY')
+        self.__vri = os.path.join(self.bcgw_db, 'WHSE_FOREST_VEGETATION.VEG_COMP_LYR_R1_POLY') if not vri  else vri
     
         self.fc_aoi = os.path.join(self.scratch_gdb, 'aoi')
         self.fc_vri_copy = os.path.join(self.scratch_gdb, 'vri_copy')
